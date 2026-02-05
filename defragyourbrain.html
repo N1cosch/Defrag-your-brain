@@ -1,0 +1,1193 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Defrag your brain</title>
+
+  <style>
+    :root{
+      color-scheme: dark;
+
+      --bg:#0b0f14;
+      --text:#d6e2ff;
+      --muted:#88a0c7;
+
+      --radius:16px;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+
+      --cell: 14px;
+      --grid-gap: 4px;
+    }
+
+    *{ box-sizing:border-box; }
+
+    body{
+      margin:0;
+      background: radial-gradient(1200px 800px at 20% 0%, #142038 0%, var(--bg) 60%) fixed;
+      color:var(--text);
+      font: 14px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      display:flex;
+      min-height:100vh;
+      align-items:center;
+      justify-content:center;
+      padding:18px;
+    }
+
+    .app{
+      width:min(1100px, 100%);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius: calc(var(--radius) + 6px);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      position:relative;
+    }
+
+    .scanlines{
+      pointer-events:none;
+      position:absolute; inset:0;
+      background:
+        repeating-linear-gradient(
+          to bottom,
+          rgba(255,255,255,.03) 0px,
+          rgba(255,255,255,.03) 1px,
+          rgba(0,0,0,0) 2px,
+          rgba(0,0,0,0) 4px
+        );
+      mix-blend-mode: overlay;
+      opacity:.22;
+    }
+
+    .top{
+      display:flex;
+      gap:14px;
+      align-items:flex-start;
+      justify-content:space-between;
+      padding:16px 16px 12px 16px;
+      background: linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,0));
+    }
+
+    .title{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+      min-width: 260px;
+    }
+
+    .title h1{
+      font-size:16px;
+      margin:0;
+      letter-spacing:.4px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    .title .sub{
+      color:var(--muted);
+      font-size:12px;
+      max-width: 560px;
+    }
+
+    .controls{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      justify-content:flex-end;
+      align-items:center;
+    }
+
+    button, select{
+      background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.06));
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--text);
+      padding:9px 11px;
+      border-radius:12px;
+      cursor:pointer;
+      transition: transform .06s ease, border-color .2s ease, background .2s ease;
+      user-select:none;
+      outline:none;
+    }
+
+    select{
+      color: var(--text);
+      background-color: rgba(20,30,50,.55);
+    }
+    option{
+      background: #0b0f14;
+      color: var(--text);
+    }
+
+    select:hover, button:hover{ border-color: rgba(255,255,255,.2); }
+    button:active{ transform: translateY(1px); }
+    button.primary{ border-color: rgba(116,247,179,.35); }
+    button.danger{ border-color: rgba(255,107,122,.35); }
+    button:disabled{ opacity:.55; cursor:not-allowed; }
+
+    .main{
+      display:grid;
+      grid-template-columns: 1fr 340px;
+      gap:12px;
+      padding: 0 16px 16px 16px;
+      align-items: stretch;
+    }
+    @media (max-width: 980px){
+      .main{ grid-template-columns: 1fr; }
+    }
+
+    .panel{
+      background: linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.12));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius: var(--radius);
+      padding:14px;
+      min-width: 0;
+    }
+
+    .grid-wrap{
+      background: linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.06));
+      border:1px solid rgba(255,255,255,.07);
+      border-radius: 14px;
+      padding:12px;
+      overflow:hidden;
+      position:relative;
+      width: 100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height: 220px;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(var(--cols), var(--cell));
+      grid-auto-rows: var(--cell);
+      gap: var(--grid-gap);
+    }
+
+    .cell{
+      width:var(--cell);
+      height:var(--cell);
+      border-radius:3px;
+      border:1px solid rgba(255,255,255,.06);
+      position:relative;
+      overflow:hidden;
+      transition: background .12s linear, border-color .12s linear, box-shadow .12s linear;
+      background: rgba(255,255,255,.05);
+    }
+    .cell[data-kind="free"]{
+      background: rgba(255,255,255,.035);
+      border-color: rgba(255,255,255,.05);
+    }
+    .cell[data-kind="file"]{
+      background: rgba(116,247,179,.18);
+      border-color: rgba(116,247,179,.35);
+    }
+    .cell[data-kind="frag"]{
+      background: rgba(255,207,106,.18);
+      border-color: rgba(255,207,106,.35);
+    }
+    .cell[data-kind="hot"]{
+      background: rgba(255,107,122,.16);
+      border-color: rgba(255,107,122,.32);
+      box-shadow: 0 0 0 2px rgba(255,107,122,.08);
+    }
+    .cell::after{
+      content:"";
+      position:absolute; inset:0;
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.22), rgba(255,255,255,0) 55%);
+      opacity:.18;
+      pointer-events:none;
+    }
+
+    .tiny{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:8px;
+    }
+
+    .stats{ display:flex; flex-direction:column; gap:10px; }
+    .row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:10px 12px;
+      border-radius: 14px;
+      background: rgba(0,0,0,.18);
+      border:1px solid rgba(255,255,255,.06);
+    }
+    .row .k{ color:var(--muted); font-size:12px; }
+
+    .bar{
+      height:10px;
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius: 99px;
+      overflow:hidden;
+      margin-top:8px;
+    }
+    .bar > div{
+      height:100%;
+      width:0%;
+      background: linear-gradient(90deg, rgba(116,247,179,.85), rgba(255,207,106,.85));
+      transition: width .18s ease;
+    }
+
+    .status{
+      font-size:13px;
+      color:#b8ccf2;
+      min-height: 64px;
+      white-space: normal;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.1);
+      background: rgba(0,0,0,.18);
+      font-size:12px;
+      color:var(--muted);
+    }
+    .led{
+      width:9px; height:9px; border-radius:50%;
+      background: rgba(255,255,255,.18);
+      box-shadow: 0 0 12px rgba(255,255,255,.1);
+    }
+    .led.run{ background: rgba(116,247,179,.8); box-shadow: 0 0 16px rgba(116,247,179,.35); }
+    .led.pause{ background: rgba(255,207,106,.85); box-shadow: 0 0 16px rgba(255,207,106,.35); }
+    .led.stop{ background: rgba(255,107,122,.85); box-shadow: 0 0 16px rgba(255,107,122,.35); }
+
+    .slider{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      border-radius: 14px;
+      background: rgba(0,0,0,.18);
+      border:1px solid rgba(255,255,255,.06);
+    }
+    input[type="range"]{ width:100%; }
+
+    .mono{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size:12px;
+      color:#bcd0ff;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="scanlines"></div>
+
+    <div class="top">
+      <div class="title">
+        <h1>
+          Defrag your brain
+          <span class="badge"><span id="led" class="led stop"></span><span id="modeText">idle</span></span>
+        </h1>
+        <div class="sub">Defragmentiere dein Gehirn</div>
+      </div>
+
+      <div class="controls">
+        <select id="diskSize" aria-label="Disk Größe">
+          <option value="S" selected>Disk: klein</option>
+          <option value="L">Disk: groß</option>
+          <option value="XL">Disk: riesig</option>
+        </select>
+
+        <button id="btnSound">Sound: aus</button>
+
+        <button id="btnStart" class="primary">Start</button>
+        <button id="btnPause" disabled>Pause</button>
+        <button id="btnTurbo">Turbo: aus</button>
+        <button id="btnReset" class="danger">Reset</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="panel">
+        <div id="gridWrap" class="grid-wrap">
+          <div id="grid" class="grid"></div>
+        </div>
+        <div class="tiny">Hier passiert nichts. Aber davon sehr viel!</div>
+      </div>
+
+      <div class="panel">
+        <div class="stats">
+          <div class="row">
+            <div style="width:100%;">
+              <div class="k">Fortschritt</div>
+              <div class="mono"><span id="pct">0</span>%</div>
+              <div class="bar"><div id="barFill"></div></div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="k">Fragmentierung</div>
+            <div class="mono"><span id="frag">0</span>%</div>
+          </div>
+
+          <div class="row">
+            <div class="k">Verschobene Blöcke</div>
+            <div class="mono" id="moves">0</div>
+          </div>
+
+          <div class="slider">
+            <div class="k">Geschwindigkeit</div>
+            <input id="speed" type="range" min="1" max="70" value="12" />
+            <div class="mono"><span id="speedVal">12</span>/s</div>
+          </div>
+
+          <div class="row">
+            <div class="k">Status</div>
+            <div class="mono" id="phase">Warte auf Start…</div>
+          </div>
+
+          <div class="status" id="status">
+            Das hier ist ein Kaminfeuer Video für Menschen, die HDD Geräusche emotional verstehen.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const gridEl = document.getElementById("grid");
+  const gridWrap = document.getElementById("gridWrap");
+
+  const pctEl = document.getElementById("pct");
+  const fragEl = document.getElementById("frag");
+  const movesEl = document.getElementById("moves");
+  const phaseEl = document.getElementById("phase");
+  const statusEl = document.getElementById("status");
+  const barFill = document.getElementById("barFill");
+
+  const btnStart = document.getElementById("btnStart");
+  const btnPause = document.getElementById("btnPause");
+  const btnTurbo = document.getElementById("btnTurbo");
+  const btnReset = document.getElementById("btnReset");
+  const btnSound = document.getElementById("btnSound");
+
+  const speed = document.getElementById("speed");
+  const speedVal = document.getElementById("speedVal");
+
+  const led = document.getElementById("led");
+  const modeText = document.getElementById("modeText");
+
+  const diskSizeEl = document.getElementById("diskSize");
+
+  class HDDSoundSynth {
+    constructor() {
+      this.ctx = null;
+      this.master = null;
+      this.running = false;
+
+      this._noiseBuf = null;
+
+      this.humGain = null;
+      this.noiseGain = null;
+
+      this.hum1 = null;
+      this.hum2 = null;
+      this.sub = null;
+
+      this.noiseLP = null;
+      this.noiseBP = null;
+
+      this._noiseSrc = null;
+
+      this.enabled = false;   
+      this.volume = 0.18;     
+      this.intensity = 0.35;    
+    }
+
+    async init() {
+      if (this.ctx) return;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new Ctx();
+
+      this.master = this.ctx.createGain();
+      this.master.gain.value = this.volume;
+      this.master.connect(this.ctx.destination);
+
+      this._noiseBuf = this._makeNoiseBuffer(2.0);
+      this._buildBase();
+    }
+
+    _makeNoiseBuffer(seconds) {
+      const sr = this.ctx.sampleRate;
+      const len = Math.floor(sr * seconds);
+      const buf = this.ctx.createBuffer(1, len, sr);
+      const data = buf.getChannelData(0);
+
+      let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+      for (let i=0; i<len; i++) {
+        const white = Math.random()*2-1;
+        b0 = 0.99886*b0 + white*0.0555179;
+        b1 = 0.99332*b1 + white*0.0750759;
+        b2 = 0.96900*b2 + white*0.1538520;
+        b3 = 0.86650*b3 + white*0.3104856;
+        b4 = 0.55000*b4 + white*0.5329522;
+        b5 = -0.7616*b5 - white*0.0168980;
+        const pink = b0+b1+b2+b3+b4+b5+b6 + white*0.5362;
+        b6 = white*0.115926;
+        data[i] = pink * 0.12;
+      }
+      return buf;
+    }
+
+    _buildBase() {
+      this.humGain = this.ctx.createGain();
+      this.noiseGain = this.ctx.createGain();
+      this.humGain.gain.value = 0.0;
+      this.noiseGain.gain.value = 0.0;
+      this.humGain.connect(this.master);
+      this.noiseGain.connect(this.master);
+
+      this.hum1 = this.ctx.createOscillator();
+      this.hum2 = this.ctx.createOscillator();
+      this.sub  = this.ctx.createOscillator();
+
+      this.hum1.frequency.value = 58;
+      this.hum2.frequency.value = 61;
+      this.sub.frequency.value  = 29;
+
+      this.hum1.type = "sine";
+      this.hum2.type = "sine";
+      this.sub.type  = "sine";
+
+      const hum1Gain = this.ctx.createGain();
+      const hum2Gain = this.ctx.createGain();
+      const subGain  = this.ctx.createGain();
+
+      hum1Gain.gain.value = 0.55;
+      hum2Gain.gain.value = 0.45;
+      subGain.gain.value  = 0.35;
+
+      this.hum1.connect(hum1Gain);
+      this.hum2.connect(hum2Gain);
+      this.sub.connect(subGain);
+
+      hum1Gain.connect(this.humGain);
+      hum2Gain.connect(this.humGain);
+      subGain.connect(this.humGain);
+
+      const noiseSrc = this.ctx.createBufferSource();
+      noiseSrc.buffer = this._noiseBuf;
+      noiseSrc.loop = true;
+
+      this.noiseLP = this.ctx.createBiquadFilter();
+      this.noiseLP.type = "lowpass";
+      this.noiseLP.frequency.value = 1400;
+      this.noiseLP.Q.value = 0.7;
+
+      this.noiseBP = this.ctx.createBiquadFilter();
+      this.noiseBP.type = "bandpass";
+      this.noiseBP.frequency.value = 480;
+      this.noiseBP.Q.value = 0.9;
+
+      noiseSrc.connect(this.noiseBP);
+      this.noiseBP.connect(this.noiseLP);
+      this.noiseLP.connect(this.noiseGain);
+
+      this.hum1.start();
+      this.hum2.start();
+      this.sub.start();
+      noiseSrc.start();
+
+      this._noiseSrc = noiseSrc;
+    }
+
+    async start() {
+      if (!this.enabled) return;
+      await this.init();
+      await this.ctx.resume();
+
+      if (this.running) return;
+      this.running = true;
+
+      const t = this.ctx.currentTime;
+
+      this.master.gain.cancelScheduledValues(t);
+      this.master.gain.setValueAtTime(0.0, t);
+      this.master.gain.linearRampToValueAtTime(this.volume, t + 0.12);
+
+      this.humGain.gain.cancelScheduledValues(t);
+      this.noiseGain.gain.cancelScheduledValues(t);
+
+      this.humGain.gain.setValueAtTime(0.0, t);
+      this.noiseGain.gain.setValueAtTime(0.0, t);
+
+      this.humGain.gain.linearRampToValueAtTime(0.18, t + 0.25);
+      this.noiseGain.gain.linearRampToValueAtTime(0.08, t + 0.35);
+    }
+
+    stop() {
+      if (!this.ctx) return;
+      this.running = false;
+
+      const t = this.ctx.currentTime;
+
+      if (this.humGain) {
+        this.humGain.gain.cancelScheduledValues(t);
+        this.humGain.gain.setValueAtTime(0.0, t);
+      }
+      if (this.noiseGain) {
+        this.noiseGain.gain.cancelScheduledValues(t);
+        this.noiseGain.gain.setValueAtTime(0.0, t);
+      }
+      if (this.master) {
+        this.master.gain.cancelScheduledValues(t);
+        this.master.gain.setValueAtTime(0.0, t);
+      }
+    }
+
+    async disableHard() {
+      this.enabled = false;
+      this.stop();
+
+      if (this.ctx) {
+        try { await this.ctx.close(); } catch(e) {}
+      }
+
+      this.ctx = null;
+      this.master = null;
+      this.running = false;
+
+      this._noiseBuf = null;
+      this.humGain = null;
+      this.noiseGain = null;
+
+      this.hum1 = null;
+      this.hum2 = null;
+      this.sub = null;
+
+      this.noiseLP = null;
+      this.noiseBP = null;
+      this._noiseSrc = null;
+    }
+
+    setVolume(v) {
+      this.volume = Math.max(0, Math.min(1, v));
+      if (this.master) this.master.gain.value = this.volume;
+    }
+
+    setIntensity(x) {
+      this.intensity = Math.max(0, Math.min(1, x));
+    }
+
+    seek(strength = 0.5) {
+      if (!this.enabled || !this.ctx || !this.running) return;
+
+      const t = this.ctx.currentTime;
+      const s = Math.max(0.05, Math.min(1, strength));
+
+      const src = this.ctx.createBufferSource();
+      src.buffer = this._noiseBuf;
+
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.value = 800 + Math.random() * 1600;
+      bp.Q.value = 3.5 + Math.random() * 3.0;
+
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 200 + Math.random() * 200;
+
+      const g = this.ctx.createGain();
+
+      const base = 0.010 + 0.035 * s * (0.6 + this.intensity);
+
+      g.gain.setValueAtTime(0.0, t);
+      g.gain.linearRampToValueAtTime(base, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03 + Math.random()*0.02);
+
+      const osc = this.ctx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = 120 + Math.random()*120;
+      const og = this.ctx.createGain();
+      og.gain.setValueAtTime(0.0, t);
+      og.gain.linearRampToValueAtTime(base*0.35, t + 0.002);
+      og.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
+
+      src.connect(hp);
+      hp.connect(bp);
+      bp.connect(g);
+      g.connect(this.master);
+
+      osc.connect(og);
+      og.connect(this.master);
+
+      src.start(t);
+      src.stop(t + 0.06);
+      osc.start(t);
+      osc.stop(t + 0.03);
+    }
+
+    flutter() {
+      if (!this.enabled || !this.ctx || !this.running) return;
+
+      const t = this.ctx.currentTime;
+      const base = 0.08;
+      const bump = 0.02 + 0.05 * this.intensity;
+
+      this.noiseLP.frequency.setValueAtTime(900 + Math.random()*800, t);
+
+      this.noiseGain.gain.cancelScheduledValues(t);
+      this.noiseGain.gain.setValueAtTime(base, t);
+      this.noiseGain.gain.linearRampToValueAtTime(base + bump, t + 0.03);
+      this.noiseGain.gain.linearRampToValueAtTime(base, t + 0.18);
+    }
+  }
+
+  const hddAudio = new HDDSoundSynth();
+
+  function applyAudioIntensity() {
+    const v = Number(speed.value);
+    const base = 0.10 + (v / 70) * 0.55;
+    const turboBoost = turbo ? 0.18 : 0;
+    hddAudio.setIntensity(Math.min(1, base + turboBoost));
+  }
+
+  const DISK_PRESETS = {
+    S:  { cols: 30, rows: 14, files: 10, speedBoost: 1.35, hot: 10 },
+    L:  { cols: 60, rows: 28, files: 28, speedBoost: 0.85, hot: 26 },
+    XL: { cols: 78, rows: 34, files: 40, speedBoost: 0.70, hot: 34 }
+  };
+
+  let COLS = DISK_PRESETS.S.cols;
+  let ROWS = DISK_PRESETS.S.rows;
+  let N = COLS * ROWS;
+  let FILES = DISK_PRESETS.S.files;
+  let speedBoost = DISK_PRESETS.S.speedBoost;
+  let HOT_COUNT = DISK_PRESETS.S.hot;
+
+  let cells = [];
+  let timer = null;
+  let running = false;
+  let turbo = false;
+  let moves = 0;
+
+  let scanIndex = 0;
+
+  let startScore = 0;
+  let progressFloor = 0;
+
+  const STATUS_EVERY_MOVES = 600;
+  let nextStatusAtMoves = 0;
+  let cachedStatus = "";
+
+  const statusPool = [
+    "Heute ist ein guter Tag, um langsam zu sein.",
+    "Ein Schritt nach dem anderen reicht völlig.",
+    "Geduld ist auch eine Form von Fortschritt.",
+    "Nicht alles muss heute fertig werden.",
+    "Manchmal ist Stillstand nur eine Pause mit Sinn.",
+    "Es muss nicht perfekt sein, nur besser als vorher.",
+    "Auch kleine Dinge finden irgendwann ihren Platz.",
+    "Wer ruhig bleibt, kommt weiter als gedacht.",
+    "Der Weg ist auch dann da, wenn man ihn nicht sieht.",
+    "Heute reicht auch: gut genug.",
+    "Ordnung entsteht leise.",
+    "Ein bisschen weniger Chaos ist schon ein Erfolg.",
+    "Du darfst dir Zeit lassen.",
+    "Wenn es ruhig wird, wird vieles klarer.",
+    "Nicht alles braucht eine Lösung.",
+    "Gedanken sortieren sich manchmal von selbst.",
+    "Man kann nicht alles kontrollieren. Und das ist okay.",
+    "Langsam ist kein Fehler.",
+    "Manchmal hilft es, einfach weiterzumachen.",
+    "Auch Pausen gehören zum Prozess.",
+    "Bitte Ruhe bewahren. Das ist ein Prozess.",
+    "Teamwork heißt: alle tun so, als wäre das geplant gewesen.",
+    "Wenn nichts mehr geht, hilft oft ein Neustart. Innerlich.",
+    "Wer Ordnung hält, ist nur zu faul zum Suchen. Oder sehr müde.",
+    "Montag ist auch nur ein Zustand.",
+    "Kaffee ist keine Lösung, aber er tarnt das Problem.",
+    "Nicht verzweifeln. Das Handbuch existiert sowieso nicht.",
+    "Man kann nicht alles gleichzeitig machen. Außer nichts.",
+    "Bitte warten. Ihre Geduld wird gerade bearbeitet.",
+    "Das dauert jetzt genau so lange, wie es dauert.",
+    "Niemand weiß genau, warum das funktioniert.",
+    "Das haben wir schon immer so gemacht.",
+    "Ein Problem nach dem anderen wirkt gleich viel kleiner.",
+    "Fehler passieren. Ordnung auch.",
+    "Wenn es läuft, nicht anfassen.",
+    "Unklar ist auch eine Form von Status.",
+    "Manchmal hilft es, einfach so zu tun, als wäre alles normal.",
+    "Dateien nach links. Freier Platz nach rechts.",
+    "Du schaust zu, wie das Chaos leiser wird.",
+    "Das Geräusch ist erfunden. Die Entspannung nicht.",
+    "Ordnung ist eine Illusion. Eine angenehme.",
+    "Jeder Block findet irgendwann seinen Platz.",
+    "Ein Swap ist ein kleines Ja zum Leben.",
+    "Du kannst nichts beschleunigen, ohne etwas zu verlieren.",
+    "Das hier ist keine Optimierung. Das ist ein Ritual.",
+    "Ordnung wird nicht gefunden. Ordnung wird hergestellt.",
+    "Du beobachtest Fortschritt, ohne etwas tun zu müssen.",
+    "Alles bewegt sich, auch wenn es langsam aussieht.",
+    "Das Chaos wehrt sich noch ein bisschen.",
+    "Hier passiert nichts Wichtiges. Und genau das hilft.",
+    "Manchmal reicht Zuschauen.",
+    "Du darfst dabei nichts fühlen. Oder alles.",
+    "Der Fortschritt ist real. Die Disk nicht.",
+    "Es wird nicht besser. Es wird ordentlicher.",
+    "Auch imaginäre Probleme verdienen Aufmerksamkeit.",
+    "Das ist Meditation mit Pixeln.",
+    "Es ist okay, das einfach laufen zu lassen."
+  ];
+
+  function rnd(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+  function pickStatus(){ return statusPool[rnd(0, statusPool.length-1)]; }
+
+  function setMode(kind){
+    led.classList.remove("run","pause","stop");
+    if(kind === "run"){ led.classList.add("run"); modeText.textContent="running"; }
+    else if(kind === "pause"){ led.classList.add("pause"); modeText.textContent="paused"; }
+    else { led.classList.add("stop"); modeText.textContent="idle"; }
+  }
+
+  function makeCell(kind="free", fileId=null){ return { kind, fileId }; }
+  function isData(c){ return c.kind === "file" || c.kind === "frag"; }
+
+  function sortKey(c){
+    if(c.kind === "hot") return 1_000_000;
+    if(c.kind === "free") return 2_000_000;
+    return c.fileId ?? 999_999;
+  }
+
+  function repaintCell(i){
+    const d = gridEl.children[i];
+    if(!d) return;
+    d.dataset.kind = cells[i].kind;
+  }
+
+  function swap(i,j){
+    const tmp = cells[i];
+    cells[i] = cells[j];
+    cells[j] = tmp;
+    repaintCell(i);
+    repaintCell(j);
+    moves++;
+
+    if (hddAudio.enabled && hddAudio.running) {
+      if (moves % 3 === 0) {
+        const strong = (moves % 21 === 0);
+        hddAudio.seek(strong ? 0.9 : 0.45);
+      } else if (moves % 7 === 0) {
+        hddAudio.flutter();
+      }
+    }
+  }
+
+  function renderGrid(){
+    gridEl.style.setProperty("--cols", COLS);
+    gridEl.innerHTML = "";
+    for(let i=0;i<N;i++){
+      const d = document.createElement("div");
+      d.className = "cell";
+      d.dataset.kind = cells[i].kind;
+      gridEl.appendChild(d);
+    }
+    applySizingAndWindow();
+  }
+
+  function makeDisk(){
+    cells = Array.from({length:N}, () => makeCell("free", null));
+
+    const fillTarget = Math.floor(N * 0.62);
+    const perFileMin = Math.max(10, Math.floor(fillTarget / FILES) - 10);
+    const perFileMax = Math.max(perFileMin + 8, Math.floor(fillTarget / FILES) + 14);
+
+    for(let f=1; f<=FILES; f++){
+      const blocks = rnd(perFileMin, perFileMax);
+      let left = blocks;
+
+      while(left > 0){
+        const chunk = Math.min(left, rnd(2, 9));
+        left -= chunk;
+
+        let tries = 0;
+        while(tries++ < 900){
+          const start = rnd(0, N - chunk - 1);
+          let ok = true;
+          for(let k=0;k<chunk;k++){
+            if(cells[start+k].kind !== "free"){ ok=false; break; }
+          }
+          if(!ok) continue;
+
+          for(let k=0;k<chunk;k++){
+            cells[start+k] = makeCell("frag", f);
+          }
+          break;
+        }
+      }
+    }
+
+    let hotPlaced = 0;
+    while(hotPlaced < HOT_COUNT){
+      const i = rnd(0, N-1);
+      if(cells[i].kind === "free"){
+        cells[i] = makeCell("hot", null);
+        hotPlaced++;
+      }
+    }
+
+    moves = 0;
+    scanIndex = 0;
+    progressFloor = 0;
+
+    cachedStatus = pickStatus();
+    nextStatusAtMoves = STATUS_EVERY_MOVES;
+
+    renderGrid();
+    updateKindsForDisplay();
+
+    startScore = computeScore();
+    updateStats("Warte auf Start…", "Disk bereit.");
+    setMode("stop");
+    btnPause.disabled = true;
+    btnStart.disabled = false;
+
+    if (hddAudio.enabled) {
+      hddAudio.stop();
+    }
+  }
+
+  function applySizingAndWindow(){
+    const outer = gridWrap.getBoundingClientRect();
+    const panelWidth = outer.width;
+
+    const wrapPadding = 12;
+    const safety = 26;
+    const availW = Math.max(80, panelWidth - (wrapPadding*2) - safety);
+
+    let cell = Math.floor(availW / COLS);
+    cell = Math.max(6, Math.min(16, cell));
+    let gap  = Math.max(1, Math.min(6, Math.floor(cell / 4)));
+
+    const gridH = ROWS * cell + (ROWS - 1) * gap;
+
+    const maxH = Math.floor(Math.min(520, window.innerHeight * 0.62));
+    const desiredH = gridH + wrapPadding*2 + 18;
+    const finalH = Math.max(220, Math.min(maxH, desiredH));
+
+    const availH = Math.max(80, finalH - (wrapPadding*2) - safety);
+    const maxCellH = Math.floor((availH - gap * (ROWS - 1)) / ROWS);
+    cell = Math.max(5, Math.min(cell, maxCellH));
+
+    gap = Math.max(1, Math.min(6, Math.floor(cell / 4)));
+
+    document.documentElement.style.setProperty("--cell", cell + "px");
+    document.documentElement.style.setProperty("--grid-gap", gap + "px");
+
+    gridWrap.style.height = finalH + "px";
+  }
+
+  function computeFragmentation(){
+    const groupsPerFile = new Map();
+    let lastFile = null;
+
+    for(let i=0;i<N;i++){
+      const c = cells[i];
+      if(!isData(c)){
+        lastFile = null;
+        continue;
+      }
+      if(c.fileId !== lastFile){
+        groupsPerFile.set(c.fileId, (groupsPerFile.get(c.fileId) || 0) + 1);
+        lastFile = c.fileId;
+      }
+    }
+
+    let totalGroups = 0;
+    let totalFiles  = 0;
+
+    for(const groups of groupsPerFile.values()){
+      totalGroups += groups;
+      totalFiles++;
+    }
+
+    if(totalFiles === 0) return 0;
+
+    const extraGroups = totalGroups - totalFiles;
+    return Math.round((extraGroups / totalGroups) * 100);
+  }
+
+  function orderedPairsRatio(){
+    let ok = 0;
+    for(let i=0;i<N-1;i++){
+      if(sortKey(cells[i]) <= sortKey(cells[i+1])) ok++;
+    }
+    return ok / (N - 1);
+  }
+
+  function isFullySorted(){
+    for(let i=0;i<N-1;i++){
+      if(sortKey(cells[i]) > sortKey(cells[i+1])) return false;
+    }
+    return true;
+  }
+
+  function computeScore(){
+    const ordered = orderedPairsRatio();
+
+    let freeRight = 0;
+    const start = Math.floor(N * 0.75);
+    for(let i=start;i<N;i++){
+      if(cells[i].kind === "free") freeRight++;
+    }
+    const freeRightPct = freeRight / (N - start);
+
+    return Math.max(0, Math.min(1, ordered * 0.85 + freeRightPct * 0.15));
+  }
+
+  function computeProgress(){
+    if(isFullySorted()) return 100;
+
+    const current = computeScore();
+    const denom = Math.max(0.0001, (1 - startScore));
+    let normalized = (current - startScore) / denom;
+
+    normalized = Math.max(0, Math.min(0.99, normalized));
+
+    const brake = (1 / speedBoost);
+    const raw = Math.round((normalized * 99) / brake);
+
+    return Math.max(0, Math.min(99, raw));
+  }
+
+  function updateKindsForDisplay(){
+    for(let i=0;i<N;i++){
+      const c = cells[i];
+      if(c.kind === "free" || c.kind === "hot") continue;
+
+      const left = i>0 ? cells[i-1] : null;
+      const right = i<N-1 ? cells[i+1] : null;
+
+      const neighborMatch =
+        (left && isData(left) && left.fileId === c.fileId) ||
+        (right && isData(right) && right.fileId === c.fileId);
+
+      c.kind = neighborMatch ? "file" : "frag";
+      repaintCell(i);
+    }
+  }
+
+  function updateStats(phase, status){
+    const frag = computeFragmentation();
+    let progress = computeProgress();
+
+    progressFloor = Math.max(progressFloor, progress);
+    progress = progressFloor;
+
+    fragEl.textContent = frag;
+    pctEl.textContent = progress;
+    barFill.style.width = progress + "%";
+    movesEl.textContent = moves;
+    phaseEl.textContent = phase;
+
+    statusEl.textContent = status;
+  }
+
+  function maybeUpdateStatus(){
+    if(moves >= nextStatusAtMoves){
+      cachedStatus = pickStatus();
+      nextStatusAtMoves = moves + STATUS_EVERY_MOVES;
+    }
+  }
+
+  function doScanSwaps(steps){
+    for(let s=0; s<steps; s++){
+      if(scanIndex >= N-1) scanIndex = 0;
+
+      const a = cells[scanIndex];
+      const b = cells[scanIndex + 1];
+
+      if(sortKey(a) > sortKey(b)){
+        swap(scanIndex, scanIndex + 1);
+        if(scanIndex > 0) scanIndex--;
+      } else {
+        scanIndex++;
+      }
+    }
+  }
+
+  function stepDefrag(){
+    const perSec = Number(speed.value);
+
+    let baseSteps = 1;
+    if(perSec >= 10) baseSteps = 6;
+    if(perSec >= 20) baseSteps = 10;
+    if(perSec >= 35) baseSteps = 16;
+    if(perSec >= 50) baseSteps = 22;
+
+    const steps = turbo ? baseSteps * 8 : baseSteps;
+
+    doScanSwaps(steps);
+    updateKindsForDisplay();
+
+    maybeUpdateStatus();
+
+    if(isFullySorted()){
+      progressFloor = 100;
+      stopRun(true);
+      updateStats("Fertig.", "Defragmentierung abgeschlossen.");
+      return;
+    }
+
+    updateStats("Defragmentiere…", cachedStatus);
+  }
+
+  function loop(){
+    const perSec = Number(speed.value);
+    const baseInterval = Math.max(16, Math.floor(1000 / perSec));
+    const interval = turbo ? 10 : baseInterval;
+
+    clearInterval(timer);
+    timer = setInterval(() => {
+      const micro = turbo ? 2 : 1;
+      for(let i=0;i<micro;i++) stepDefrag();
+    }, interval);
+  }
+
+  async function startRun(){
+    if(running) return;
+    running = true;
+    setMode("run");
+    btnStart.disabled = true;
+    btnPause.disabled = false;
+    btnPause.textContent = "Pause";
+    updateStats("Defragmentiere…", cachedStatus || pickStatus());
+
+    applyAudioIntensity();
+    if (hddAudio.enabled) await hddAudio.start();
+
+    loop();
+  }
+
+  function stopRun(finished=false){
+    running = false;
+    clearInterval(timer);
+    timer = null;
+
+    if(finished){
+      setMode("stop");
+      btnStart.disabled = false;
+      btnPause.disabled = true;
+      if (hddAudio.enabled) hddAudio.stop();
+    } else {
+      setMode("pause");
+      btnStart.disabled = true;
+      btnPause.disabled = false;
+      btnPause.textContent = "Fortsetzen";
+      if (hddAudio.enabled && hddAudio.running) hddAudio.setIntensity(0.10);
+    }
+  }
+
+  async function togglePause(){
+    if(!running && timer===null){
+      running = true;
+      setMode("run");
+      btnPause.textContent = "Pause";
+      updateStats("Defragmentiere…", cachedStatus);
+
+      applyAudioIntensity();
+      if (hddAudio.enabled) await hddAudio.start();
+
+      loop();
+      return;
+    }
+
+    clearInterval(timer);
+    timer = null;
+    running = false;
+    setMode("pause");
+    btnPause.textContent = "Fortsetzen";
+    updateStats("Pausiert.", cachedStatus);
+
+    if (hddAudio.enabled && hddAudio.running) hddAudio.setIntensity(0.10);
+  }
+
+  function reset(){
+    clearInterval(timer);
+    timer = null;
+    running = false;
+    turbo = false;
+    btnTurbo.textContent = "Turbo: aus";
+    if (hddAudio.enabled) hddAudio.stop();
+    makeDisk();
+  }
+
+  function toggleTurbo(){
+    turbo = !turbo;
+    btnTurbo.textContent = turbo ? "Turbo: an" : "Turbo: aus";
+    if(timer) loop();
+    maybeUpdateStatus();
+    updateStats(turbo ? "Defragmentiere (Turbo)…" : "Defragmentiere…", cachedStatus);
+
+    applyAudioIntensity();
+  }
+
+  function onResize(){
+    applySizingAndWindow();
+  }
+
+  speed.addEventListener("input", () => {
+    speedVal.textContent = speed.value;
+    if(timer) loop();
+    applyAudioIntensity();
+  });
+
+  diskSizeEl.addEventListener("change", () => {
+    const preset = DISK_PRESETS[diskSizeEl.value] || DISK_PRESETS.S;
+    COLS = preset.cols;
+    ROWS = preset.rows;
+    N = COLS * ROWS;
+    FILES = preset.files;
+    speedBoost = preset.speedBoost;
+    HOT_COUNT = preset.hot;
+
+    const suggested = Math.max(6, Math.min(40, Math.round(14 * speedBoost)));
+    speed.value = String(suggested);
+    speedVal.textContent = speed.value;
+
+    reset();
+  });
+
+  btnSound.addEventListener("click", async () => {
+    if (hddAudio.enabled) {
+      btnSound.textContent = "Sound: aus";
+      await hddAudio.disableHard();
+      return;
+    }
+
+    hddAudio.enabled = true;
+    btnSound.textContent = "Sound: an";
+
+    applyAudioIntensity();
+    await hddAudio.start();
+
+    if (!running) hddAudio.setIntensity(0.10);
+  });
+
+  btnStart.addEventListener("click", startRun);
+  btnPause.addEventListener("click", togglePause);
+  btnTurbo.addEventListener("click", toggleTurbo);
+  btnReset.addEventListener("click", reset);
+
+  window.addEventListener("resize", onResize);
+
+  speedVal.textContent = speed.value;
+  makeDisk();
+})();
+</script>
+</body>
+</html>
